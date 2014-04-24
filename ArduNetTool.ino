@@ -14,7 +14,9 @@
 #include <Wire.h>
 #include <Adafruit_MCP23017.h>
 #include <Adafruit_RGBLCDShield.h>
-
+#include <SPI.h>
+#include <Ethernet.h>
+#include <EEPROM.h>
 
 #define RED 0x1
 #define YELLOW 0x3
@@ -24,6 +26,10 @@
 #define VIOLET 0x5
 #define WHITE 0x7
 
+byte mac[] = {  
+  0x06, 0xAA, 0x00, 0x00, 0x00, 0x00 };
+  
+EthernetClient client;
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 
 
@@ -34,9 +40,13 @@ int menu =-1, subMenu =-1, color = 1;
 boolean tmp = false, conStatus = false;
 
 void setup() {
+  Serial.begin(9600);
   lcd.begin(16, 2);
   lcd.setBacklight(VIOLET);
-  lcd.setCursor(0,0);                    
+  lcd.setCursor(0,0);
+  
+  int sensorValue = analogRead(A5);
+  randomSeed(sensorValue);
   
   lcd.print("Net Tool v0.5");            
   lcd.setCursor(0,1);                    
@@ -78,7 +88,9 @@ void loop() {
     if (buttons & BUTTON_SELECT) {
       buttonPressed = true;
       if (menu == 1 && subMenu == 2) { // connect
-        conStatus = true;
+        if (Ethernet.begin(mac) == 1) {
+          conStatus = true;
+        }
       }
       if (menu == 1 && subMenu == 3) { // disconnect
         conStatus = false;
@@ -99,6 +111,14 @@ void loop() {
       subMenu = 1; 
     }
   }
+  if (conStatus) {
+    for (byte thisByte = 0; thisByte < 4; thisByte++) {
+      // print the value of each byte of the IP address:
+      Serial.print(Ethernet.localIP()[thisByte], DEC);
+      Serial.print("."); 
+    }
+    Serial.println();  
+  }
 
   if(buttonPressed == true) {
     buttonPressed = false;
@@ -108,6 +128,21 @@ void loop() {
   buttonPressed = false;
 }
 
+void getMacAddress(byte* mac) {
+  int eepromOffset = 128;
+  int b = 0; 
+  for (int c = 0; c < 6; c++) {
+    b = 0;
+    if(mac[c] == 0) {
+      b = EEPROM.read(eepromOffset + c);
+      if(b == 0 || b == 255) {
+         b = random(0, 255);
+         EEPROM.write(eepromOffset + c, b);
+      }
+    mac[c] = b;
+    }
+  }
+}  
 void updateScreen(int menu, int subMenu, int count, boolean conStatus) {
   lcd.setCursor(0,0);
    // print menu
@@ -143,12 +178,24 @@ void updateScreen(int menu, int subMenu, int count, boolean conStatus) {
     if (subMenu == 1) {
       lcd.print("    IP");
       lcd.setCursor(0,1);
-      lcd.print(conStatus ? "192.168.1.7" : "Disconnected");
+      if (conStatus) {
+        for (byte thisByte = 0; thisByte < 4; thisByte++) {
+          // print the value of each byte of the IP address:
+          lcd.print(Ethernet.localIP()[thisByte], DEC);
+          if(thisByte < 3) {
+            lcd.print(".");
+          }
+        }
+      }
+      else {
+        lcd.print("Disconnected");
+      };
     }
     if (subMenu == 2) {
       lcd.print("   GTWY");
       lcd.setCursor(0,1);
-      lcd.print(conStatus ? "192.168.1.1" : "Disconnected");
+      lcd.print("---.---.---.---");
+      //lcd.print(conStatus ? "192.168.1.1" : "Disconnected");
     }
   }
 }
